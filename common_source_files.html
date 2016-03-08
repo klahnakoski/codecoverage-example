@@ -1,0 +1,108 @@
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<HTML>
+<HEAD>
+	<script type="text/javascript" src="modevlib/imports/import.js"></script>
+    <link type="text/css" rel="stylesheet" href="css/menu.css"/>
+</HEAD>
+<BODY>
+
+<h3>Using groupby</h3>
+<div id="coverage1"></div>
+<h3>Using edges</h3>
+<div id="coverage2"></div>
+
+
+<script type="application/javascript">
+
+
+importScript([
+	'modevlib/main.js'
+], function(){
+
+    Thread.run(function*(){
+        var coverage = yield (search({
+            "from":"coverage",
+            "where":{"prefix":{"test.url":"chrome://mochitests/content/browser/browser/components/places/tests/browser/"}},
+            "groupby":[
+                {"name":"test", "value":"test.url"},
+                {"name":"source", "value":"source.file"}
+            ],
+            "limit":10000,
+            "format":"list"
+        }));
+
+
+        //MAP EACH TEST TO THE SET OF FILES COVERED
+        var sources_by_test={};
+        coverage.data.forall(function(d, i){
+            sources_by_test[d.test] = coalesce(sources_by_test[d.test], {});
+            sources_by_test[d.test][d.source]=true;  // USE THE KEYS OF THE OBJECT AS SET
+        });
+
+        //FIND THE INTERSECTION OF COVERED FILES
+        var commonSources = null;
+        Map.forall(sources_by_test, function(test, sourceList){
+            if (commonSources==null) {
+                commonSources = Map.keys(sourceList);
+            }else{
+                commonSources = commonSources.intersect(Map.keys(sourceList));
+            }//endif
+        });
+
+        //PRINT IT OUT
+        $("#coverage1").html(convert.String2HTML(convert.value2json(qb.sort(commonSources, "."))));
+    });
+
+
+
+
+    Thread.run(function*(){
+        var coverage = yield (search({
+            "from":"coverage",
+            "where":{"prefix":{"test.url":"chrome://mochitests/content/browser/browser/components/places/tests/browser/"}},
+            "edges":[
+                {"name":"source", "value":"source.file"},
+                {"name": "test", "value": "test.url", "allowNulls": false}
+            ],
+            "limit":10000,
+            "format":"cube"
+        }));
+
+        //edges[0] DESCRIBES THE source DIMENSION, WE SELECT ALL PARTS OF THE DOMAIN
+        var all_sources = coverage.edges[0].domain.partitions.select("value");
+
+        //DATA IS IN {"count": [source][test]} PIVOT TABLE
+        var commonSources=[];
+        coverage.data.count.forall(function(tests, i){
+            //VERIFY THIS source TOUCHES ALL TESTS (count>0)
+            if (Array.AND(tests.map(function(v){return v>0;}))) {
+                commonSources.append(all_sources[i]);
+            }//endif
+        });
+
+        //PRINT IT OUT
+        $("#coverage2").html(convert.String2HTML(convert.value2json(qb.sort(commonSources, "."))));
+    });
+
+
+});
+
+
+
+var search = function*(query){
+	var output = yield (Rest.post({
+		url: "https://activedata.allizom.org/query",
+		json: query
+	}));
+	yield (output);
+};
+
+
+</script>
+
+
+</BODY>
+</HTML>
