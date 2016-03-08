@@ -1,0 +1,85 @@
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<HTML>
+<HEAD>
+	<script type="text/javascript" src="modevlib/imports/import.js"></script>
+    <link type="text/css" rel="stylesheet" href="css/menu.css"/>
+</HEAD>
+<BODY>
+
+<h3 id="test_name"></h3>
+<div id="siblings"></div>
+
+
+<script type="application/javascript">
+
+
+importScript([
+	'modevlib/main.js'
+], function(){
+
+    var TEST = "chrome://mochitests/content/browser/browser/components/places/tests/browser/browser_bookmarklet_windowOpen.js";
+    var TEMPLATE = new Template([
+        "<table><thead><tr><th>Source File</th><th>Sibling Tests</th></tr></thead><tbody>",
+        {"from":".", "template":[
+            "<tr><td>{{source}}</td><td>{{tests|json}}</td>"
+        ]},
+        "</tbody></table>"
+    ]);
+
+    Thread.run(function*(){
+
+        // GET SOURCE FILES COVERED BY TEST
+        var sources = yield (search({
+            "from": "coverage",
+            "where": {"eq": {"test.url": TEST}},
+            "groupby": [
+                {"name": "source", "value": "source.file"}
+            ],
+            "limit": 100000,
+            "format": "list"
+        }));
+
+        //FOR EACH FILE, FIND NUMBER OF OTHER TESTS
+        var siblings = yield (search({
+            // FIND TEST THAT COVER THE SAME
+            "from": "coverage",
+            "select": {"name": "tests", "value": "test.url", "aggregate":"union"},
+            "where": {"in": {"source.file": sources.data.select("source")}},
+            "groupby": [
+                {"name": "source", "value": "source.file"}
+            ],
+            "limit": 100000,
+            "format": "list"
+        }));
+
+        siblings.data = qb.sort(siblings.data, "tests.length");
+
+        //REMOVE SELF
+        siblings.data.forall(function(v){
+            v.tests.remove(TEST);
+        });
+
+        //PRINT IT OUT
+        $("#test_name").html(TEST);
+        $("#siblings").html(TEMPLATE.replace(siblings.data))
+    });
+});
+
+
+var search = function*(query){
+	var output = yield (Rest.post({
+		url: "https://activedata.allizom.org/query",
+		json: query
+	}));
+	yield (output);
+};
+
+
+</script>
+
+
+</BODY>
+</HTML>
